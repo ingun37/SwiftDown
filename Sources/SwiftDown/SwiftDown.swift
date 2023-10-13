@@ -5,6 +5,7 @@
 //  Created by Quentin Eude on 16/03/2021.
 //
 
+import Combine
 #if os(iOS)
   import UIKit
 
@@ -211,6 +212,10 @@ protocol SwiftDownDelegate {
     func applyStyles() {
       assert(highlighter != nil)
       highlighter.applyStyles()
+    }
+
+    func textChangeNotification() -> NotificationCenter.Publisher {
+      return NotificationCenter.default.publisher(for: NSText.didChangeNotification, object: textView)
     }
   }
 #endif
