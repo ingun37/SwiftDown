@@ -12,7 +12,8 @@
   public class SwiftDown: UITextView, UITextViewDelegate {
     var storage: Storage = Storage()
     var highlighter: SwiftDownHighligther?
-
+    var swiftDownDelegate: SwiftDownDelegate?
+    
     convenience init(frame: CGRect, theme: Theme) {
       self.init(frame: frame, textContainer: nil)
       self.storage.theme = theme
@@ -47,7 +48,19 @@
     public override func willMove(toSuperview newSuperview: UIView?) {
       self.highlighter = SwiftDownHighligther(textView: self)
     }
+    
+    public func textViewDidChange(_ textView: UITextView) {
+      self.swiftDownDelegate?.textViewDidChange(self)
+    }
+    
+    public func textViewDidChangeSelection(_ textView: UITextView) {
+      self.swiftDownDelegate?.textViewDidChangeSelection(self)
+    }
   }
+protocol SwiftDownDelegate {
+  func textViewDidChange(_ textView: SwiftDown)
+  func textViewDidChangeSelection(_ textView: SwiftDown)
+}
 #else
   import AppKit
 

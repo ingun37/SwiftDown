@@ -17,7 +17,7 @@ public struct SwiftDownEditor: UIViewRepresentable {
     }
   }
 
-    @Binding var selectedRange: NSRange
+    @Binding var selectedRange: (NSRange, MarkdownNode?)
 
     private(set) var isEditable: Bool = true
     private(set) var theme: Theme = Theme.BuiltIn.defaultDark.theme()
@@ -35,13 +35,13 @@ public struct SwiftDownEditor: UIViewRepresentable {
       onTextChange: @escaping (String) -> Void = { _ in }
     ) {
       _text = text
-      _selectedRange = .constant(NSRange())
+      _selectedRange = .constant((NSRange(), nil))
       self.onTextChange = onTextChange
     }
 
     public init(
       text: Binding<String>,
-      selectedRange: Binding<NSRange>,
+      selectedRange: Binding<(NSRange, MarkdownNode?)>,
       onTextChange: @escaping (String) -> Void = { _ in }
     ) {
       _text = text
@@ -54,7 +54,7 @@ public struct SwiftDownEditor: UIViewRepresentable {
       swiftDown.storage.markdowner = { self.engine.render($0, offset: $1) }
       swiftDown.storage.applyMarkdown = { m in Theme.applyMarkdown(markdown: m, with: self.theme) }
       swiftDown.storage.applyBody = { Theme.applyBody(with: self.theme) }
-      swiftDown.delegate = context.coordinator
+      swiftDown.swiftDownDelegate = context.coordinator
       swiftDown.isEditable = true
       swiftDown.isScrollEnabled = true
       swiftDown.keyboardType = keyboardType
@@ -83,14 +83,14 @@ public struct SwiftDownEditor: UIViewRepresentable {
 
   // MARK: - SwiftDownEditor iOS Coordinator
   extension SwiftDownEditor {
-    public class Coordinator: NSObject, UITextViewDelegate {
+    public class Coordinator: NSObject, SwiftDownDelegate {
       var parent: SwiftDownEditor
 
       init(_ parent: SwiftDownEditor) {
         self.parent = parent
       }
 
-      public func textViewDidChange(_ textView: UITextView) {
+      public func textViewDidChange(_ textView: SwiftDown) {
         guard textView.markedTextRange == nil else { return }
 
         DispatchQueue.main.async {
@@ -98,11 +98,15 @@ public struct SwiftDownEditor: UIViewRepresentable {
         }
       }
 
-      public func textViewDidChangeSelection(_ textView: UITextView) {
+      public func textViewDidChangeSelection(_ textView: SwiftDown) {
         guard textView.markedTextRange == nil else { return }
 
+        let rng = textView.selectedRange
         DispatchQueue.main.async {
-          self.parent.selectedRange = textView.selectedRange
+          self.parent.selectedRange = (
+            rng,
+            tryFindingMarkdownNode(rng: rng, markdownNodes: textView.storage.markdownNodes)
+          )
         }
       }
     }
@@ -212,28 +216,10 @@ public struct SwiftDownEditor: UIViewRepresentable {
         guard let textView = notification.object as? NSTextView else {
           return
         }
-        DispatchQueue.main.async {
-          let rng = textView.selectedRange()
-          if let c = textView as? CustomTextView {
-            c.storage.markdownNodes.forEach { hhh in
-              print(hhh)
-            }
-            let node: MarkdownNode? = c.storage.markdownNodes.reduce(nil) { prev, mn in
-              if isBiggerThan(x: mn.range, y: rng) {
-                if let prev = prev {
-                  if isBiggerThan(x: prev.range, y: mn.range) {
-                    return mn
-                  } else {
-                    return prev
-                  }
-                } else {
-                  return mn
-                }
-              } else {
-                return prev
-              }
-            }
-            self.parent.selectedRange = (rng, node)
+        let rng = textView.selectedRange()
+        if let c = textView as? CustomTextView {
+          DispatchQueue.main.async {
+            self.parent.selectedRange = (rng, tryFindingMarkdownNode(rng: rng, markdownNodes: c.storage.markdownNodes))
           }
         }
       }
@@ -264,4 +250,22 @@ extension SwiftDownEditor {
 
 func isBiggerThan(x: NSRange, y:NSRange) -> Bool {
   return x.location <= y.location && y.location + y.length <= x.location + x.length
+}
+
+func tryFindingMarkdownNode(rng: NSRange, markdownNodes: [MarkdownNode]) -> MarkdownNode? {
+    markdownNodes.reduce(nil) { prev, mn in
+      if isBiggerThan(x: mn.range, y: rng) {
+        if let prev = prev {
+          if isBiggerThan(x: prev.range, y: mn.range) {
+            return mn
+          } else {
+            return prev
+          }
+        } else {
+          return mn
+        }
+      } else {
+        return prev
+      }
+    }
 }
