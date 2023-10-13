@@ -10,7 +10,7 @@ import SwiftDown
 
 struct ContentView: View {
   @State private var text: String = "# H1\n## H2\n### H3\n#### H4\n##### H5\n###### H6\n**bold** __bold__\n*italic* _italic_\n`inline code`\n```\ncode block\n```\n\n> block quote\n\n- list\n\n1. list\n\n[link](link)\n\nbody"
-  @State private var selectedRange: NSRange = NSRange()
+  @State private var selectedRange: (NSRange, MarkdownNode?) = (NSRange(), nil)
   @FocusState private var focusedField: FocusField?
 
   var body: some View {
@@ -24,7 +24,7 @@ struct ContentView: View {
       }
       TextEditor(text: $text)
       HStack {
-        Text("selected \(selectedRange.description)")
+        Text("selected \(selectedRange.0.description) \(selectedRange.1.debugDescription)")
         Button {
           self.text = ""
         } label: {

@@ -143,8 +143,8 @@ public struct SwiftDownEditor: UIViewRepresentable {
       }
     }
 
-    @Binding var selectedRange: NSRange
-    
+    @Binding var selectedRange: (NSRange, MarkdownNode?)
+
     private(set) var isEditable: Bool = true
     private(set) var theme: Theme = Theme.BuiltIn.defaultDark.theme()
     private(set) var insetsSize: CGFloat = 0
@@ -156,13 +156,13 @@ public struct SwiftDownEditor: UIViewRepresentable {
       onTextChange: @escaping (String) -> Void = { _ in }
     ) {
       _text = text
-      _selectedRange = .constant(NSRange())
+      _selectedRange = .constant((NSRange(), nil))
       self.onTextChange = onTextChange
     }
-    
+
     public init(
       text: Binding<String>,
-      selectedRange: Binding<NSRange>,
+      selectedRange: Binding<(NSRange, MarkdownNode?)>,
       onTextChange: @escaping (String) -> Void = { _ in }
     ) {
       _text = text
@@ -213,7 +213,28 @@ public struct SwiftDownEditor: UIViewRepresentable {
           return
         }
         DispatchQueue.main.async {
-          self.parent.selectedRange = textView.selectedRange()
+          let rng = textView.selectedRange()
+          if let c = textView as? CustomTextView {
+            c.storage.markdownNodes.forEach { hhh in
+              print(hhh)
+            }
+            let node: MarkdownNode? = c.storage.markdownNodes.reduce(nil) { prev, mn in
+              if isBiggerThan(x: mn.range, y: rng) {
+                if let prev = prev {
+                  if isBiggerThan(x: prev.range, y: mn.range) {
+                    return mn
+                  } else {
+                    return prev
+                  }
+                } else {
+                  return mn
+                }
+              } else {
+                return prev
+              }
+            }
+            self.parent.selectedRange = (rng, node)
+          }
         }
       }
     }
@@ -239,4 +260,8 @@ extension SwiftDownEditor {
     editor.isEditable = isEditable
     return editor
   }
+}
+
+func isBiggerThan(x: NSRange, y:NSRange) -> Bool {
+  return x.location <= y.location && y.location + y.length <= x.location + x.length
 }

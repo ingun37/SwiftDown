@@ -129,7 +129,7 @@
     }()
 
     // MARK: - TextView setup
-    private lazy var textView: NSTextView = {
+    private lazy var textView: CustomTextView = {
       let contentSize = scrollView.contentSize
       let textView = CustomTextView(frame: scrollView.frame, theme: theme)
       textView.delegate = self.delegate

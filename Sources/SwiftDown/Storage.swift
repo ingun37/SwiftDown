@@ -33,6 +33,8 @@ public class Storage: NSTextStorage {
 
   var backingStore = NSTextStorage()
 
+  public var markdownNodes: [MarkdownNode] = []
+  
   override public var string: String {
     return backingStore.string
   }
@@ -107,6 +109,7 @@ public class Storage: NSTextStorage {
     md.forEach {
       addAttributes(applyMarkdown($0), range: $0.range)
     }
+    self.markdownNodes = md
     self.edited(.editedAttributes, range: paragraphNSRange, changeInLength: 0)
   }
 }
