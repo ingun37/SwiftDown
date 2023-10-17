@@ -12,6 +12,8 @@ import Combine
 #if os(iOS)
   // MARK: - SwiftDownEditor iOS
 public struct SwiftDownEditor: UIViewRepresentable {
+  private var debounceTime = 0.3
+  private var styleUpdateCue = PassthroughSubject<Any, Never>()
   @Binding var text: String {
     didSet {
       onTextChange(text)
@@ -27,7 +29,6 @@ public struct SwiftDownEditor: UIViewRepresentable {
     private(set) var autocorrectionType: UITextAutocorrectionType = .default
     private(set) var keyboardType: UIKeyboardType = .default
     private(set) var textAlignment: TextAlignment = .leading
-    private(set) var debounceTime: Double = 0.5
 
     public var onTextChange: (String) -> Void = { _ in }
     let engine = MarkdownEngine()
@@ -69,19 +70,18 @@ public struct SwiftDownEditor: UIViewRepresentable {
       swiftDown.textColor = theme.tintColor
       swiftDown.text = text
 
-      context.coordinator.cancellable = NotificationCenter.default
-        .publisher(for: SwiftDown.textDidChangeNotification, object: swiftDown)
-        .debounce(for: .seconds(debounceTime), scheduler: RunLoop.main)
-        .sink { _ in
-          let selectedRange = swiftDown.selectedRange
-          swiftDown.text = text
-          swiftDown.highlighter?.applyStyles()
-          swiftDown.selectedRange = selectedRange
-        }
+      context.coordinator.cancellable = styleUpdateCue.debounce(for: .seconds(debounceTime), scheduler: RunLoop.main).sink { _ in
+        let selectedRanges = swiftDown.selectedRange
+        swiftDown.text = text
+        swiftDown.highlighter?.applyStyles()
+        swiftDown.selectedRange = selectedRanges
+      }
       return swiftDown
     }
 
-    public func updateUIView(_ uiView: SwiftDown, context: Context) {}
+    public func updateUIView(_ uiView: SwiftDown, context: Context) {
+      styleUpdateCue.send(0)
+    }
 
     public func makeCoordinator() -> Coordinator {
       Coordinator(self)
@@ -150,6 +150,8 @@ public struct SwiftDownEditor: UIViewRepresentable {
 #else
   // MARK: - SwiftDownEditor macOS
   public struct SwiftDownEditor: NSViewRepresentable {
+    private var debounceTime = 0.3
+    private var styleUpdateCue = PassthroughSubject<Any, Never>()
     @Binding var text: String {
       didSet {
         onTextChange(text)
@@ -161,7 +163,6 @@ public struct SwiftDownEditor: UIViewRepresentable {
     private(set) var isEditable: Bool = true
     private(set) var theme: Theme = Theme.BuiltIn.defaultDark.theme()
     private(set) var insetsSize: CGFloat = 0
-    private(set) var debounceTime: Double = 0.5
 
     public var onTextChange: (String) -> Void = { _ in }
 
@@ -190,19 +191,18 @@ public struct SwiftDownEditor: UIViewRepresentable {
       swiftDown.setupTextView()
       swiftDown.text = text
 
-      context.coordinator.cancellable = swiftDown.textChangeNotification()
-        .debounce(for: .seconds(debounceTime), scheduler: RunLoop.main)
-        .sink { _ in
-          let selectedRanges = swiftDown.selectedRanges
-          swiftDown.text = text
-          swiftDown.applyStyles()
-          swiftDown.selectedRanges = selectedRanges
-        }
-
+      context.coordinator.cancellable = styleUpdateCue.debounce(for: .seconds(debounceTime), scheduler: RunLoop.main).sink { _ in
+        let selectedRanges = swiftDown.selectedRanges
+        swiftDown.text = text
+        swiftDown.applyStyles()
+        swiftDown.selectedRanges = selectedRanges
+      }
       return swiftDown
     }
 
-    public func updateNSView(_ nsView: SwiftDown, context: Context) {}
+    public func updateNSView(_ nsView: SwiftDown, context: Context) {
+      styleUpdateCue.send(0)
+    }
 
     public func makeCoordinator() -> Coordinator {
       Coordinator(self)
@@ -215,7 +215,6 @@ public struct SwiftDownEditor: UIViewRepresentable {
     public class Coordinator: NSObject, NSTextViewDelegate {
       public var cancellable: Cancellable?
       var parent: SwiftDownEditor
-
       init(_ parent: SwiftDownEditor) {
         self.parent = parent
       }
@@ -262,7 +261,7 @@ extension SwiftDownEditor {
     editor.isEditable = isEditable
     return editor
   }
-  
+
   public func debounceTime(_ debounceTime: Double) -> Self {
     var editor = self
     editor.debounceTime = debounceTime
