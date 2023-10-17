@@ -191,12 +191,14 @@ public struct SwiftDownEditor: UIViewRepresentable {
       swiftDown.setupTextView()
       swiftDown.text = text
 
-      context.coordinator.cancellable = styleUpdateCue.debounce(for: .seconds(debounceTime), scheduler: RunLoop.main).sink { _ in
-        let selectedRanges = swiftDown.selectedRanges
-        swiftDown.text = text
-        swiftDown.applyStyles()
-        swiftDown.selectedRanges = selectedRanges
-      }
+      context.coordinator.cancellable = styleUpdateCue
+        .debounce(for: .seconds(debounceTime), scheduler: RunLoop.main)
+        .sink { _ in
+          let selectedRanges = swiftDown.selectedRanges
+          swiftDown.text = text
+          swiftDown.applyStyles()
+          swiftDown.selectedRanges = selectedRanges
+        }
       return swiftDown
     }
 
@@ -213,7 +215,7 @@ public struct SwiftDownEditor: UIViewRepresentable {
   extension SwiftDownEditor {
     // MARK: - Coordinator
     public class Coordinator: NSObject, NSTextViewDelegate {
-      public var cancellable: Cancellable?
+      var cancellable: Cancellable?
       var parent: SwiftDownEditor
       init(_ parent: SwiftDownEditor) {
         self.parent = parent
