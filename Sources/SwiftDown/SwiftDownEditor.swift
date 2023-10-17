@@ -12,13 +12,13 @@ import Combine
 #if os(iOS)
   // MARK: - SwiftDownEditor iOS
 public struct SwiftDownEditor: UIViewRepresentable {
+  private var debounceTime = 0.3
+  private var styleUpdateCue = PassthroughSubject<Any, Never>()
   @Binding var text: String {
     didSet {
       onTextChange(text)
     }
   }
-
-    @Binding var selectedRange: (NSRange, MarkdownNode?)
 
     private(set) var isEditable: Bool = true
     private(set) var theme: Theme = Theme.BuiltIn.defaultDark.theme()
@@ -27,28 +27,19 @@ public struct SwiftDownEditor: UIViewRepresentable {
     private(set) var autocorrectionType: UITextAutocorrectionType = .default
     private(set) var keyboardType: UIKeyboardType = .default
     private(set) var textAlignment: TextAlignment = .leading
-    private(set) var debounceTime: Double = 0.5
 
     public var onTextChange: (String) -> Void = { _ in }
+    public var onSelectionChange: (NSRange, MarkdownNode?) -> Void = { (_,_) in }
     let engine = MarkdownEngine()
 
     public init(
       text: Binding<String>,
-      onTextChange: @escaping (String) -> Void = { _ in }
+      onTextChange: @escaping (String) -> Void = { _ in },
+      onSelectionChange: @escaping (NSRange, MarkdownNode?) -> Void = { (_,_) in }
     ) {
       _text = text
-      _selectedRange = .constant((NSRange(), nil))
       self.onTextChange = onTextChange
-    }
-
-    public init(
-      text: Binding<String>,
-      selectedRange: Binding<(NSRange, MarkdownNode?)>,
-      onTextChange: @escaping (String) -> Void = { _ in }
-    ) {
-      _text = text
-      _selectedRange = selectedRange
-      self.onTextChange = onTextChange
+      self.onSelectionChange = onSelectionChange
     }
 
     public func makeUIView(context: Context) -> SwiftDown {
@@ -69,19 +60,22 @@ public struct SwiftDownEditor: UIViewRepresentable {
       swiftDown.textColor = theme.tintColor
       swiftDown.text = text
 
-      context.coordinator.cancellable = NotificationCenter.default
-        .publisher(for: SwiftDown.textDidChangeNotification, object: swiftDown)
-        .debounce(for: .seconds(debounceTime), scheduler: RunLoop.main)
-        .sink { _ in
-          let selectedRange = swiftDown.selectedRange
-          swiftDown.text = text
-          swiftDown.highlighter?.applyStyles()
-          swiftDown.selectedRange = selectedRange
-        }
       return swiftDown
     }
 
-    public func updateUIView(_ uiView: SwiftDown, context: Context) {}
+  public func updateUIView(_ uiView: SwiftDown, context: Context) {
+    context.coordinator.cancellable?.cancel()
+    context.coordinator.cancellable = Timer
+      .publish(every: debounceTime, on: .current, in: .default)
+      .autoconnect()
+      .first()
+      .sink { _ in
+        let selectedRange = uiView.selectedRange
+        uiView.text = text
+        uiView.highlighter?.applyStyles()
+        uiView.selectedRange = selectedRange
+      }
+  }
 
     public func makeCoordinator() -> Coordinator {
       Coordinator(self)
@@ -109,14 +103,8 @@ public struct SwiftDownEditor: UIViewRepresentable {
 
       public func textViewDidChangeSelection(_ textView: SwiftDown) {
         guard textView.markedTextRange == nil else { return }
-
         let rng = textView.selectedRange
-        DispatchQueue.main.async {
-          self.parent.selectedRange = (
-            rng,
-            tryFindingMarkdownNode(rng: rng, markdownNodes: textView.storage.markdownNodes)
-          )
-        }
+        self.parent.onSelectionChange(rng, tryFindingMarkdownNode(rng: rng, markdownNodes: textView.storage.markdownNodes))
       }
     }
   }
@@ -150,38 +138,28 @@ public struct SwiftDownEditor: UIViewRepresentable {
 #else
   // MARK: - SwiftDownEditor macOS
   public struct SwiftDownEditor: NSViewRepresentable {
+    private var debounceTime = 0.3
     @Binding var text: String {
       didSet {
         onTextChange(text)
       }
     }
 
-    @Binding var selectedRange: (NSRange, MarkdownNode?)
-
     private(set) var isEditable: Bool = true
     private(set) var theme: Theme = Theme.BuiltIn.defaultDark.theme()
     private(set) var insetsSize: CGFloat = 0
-    private(set) var debounceTime: Double = 0.5
 
     public var onTextChange: (String) -> Void = { _ in }
+    public var onSelectionChange: (NSRange, MarkdownNode?) -> Void = { (_,_) in }
 
     public init(
       text: Binding<String>,
-      onTextChange: @escaping (String) -> Void = { _ in }
+      onTextChange: @escaping (String) -> Void = { _ in },
+      onSelectionChange: @escaping (NSRange, MarkdownNode?) -> Void = { (_,_) in }
     ) {
       _text = text
-      _selectedRange = .constant((NSRange(), nil))
       self.onTextChange = onTextChange
-    }
-
-    public init(
-      text: Binding<String>,
-      selectedRange: Binding<(NSRange, MarkdownNode?)>,
-      onTextChange: @escaping (String) -> Void = { _ in }
-    ) {
-      _text = text
-      _selectedRange = selectedRange
-      self.onTextChange = onTextChange
+      self.onSelectionChange = onSelectionChange
     }
 
     public func makeNSView(context: Context) -> SwiftDown {
@@ -189,20 +167,22 @@ public struct SwiftDownEditor: UIViewRepresentable {
       swiftDown.delegate = context.coordinator
       swiftDown.setupTextView()
       swiftDown.text = text
-
-      context.coordinator.cancellable = swiftDown.textChangeNotification()
-        .debounce(for: .seconds(debounceTime), scheduler: RunLoop.main)
-        .sink { _ in
-          let selectedRanges = swiftDown.selectedRanges
-          swiftDown.text = text
-          swiftDown.applyStyles()
-          swiftDown.selectedRanges = selectedRanges
-        }
-
       return swiftDown
     }
 
-    public func updateNSView(_ nsView: SwiftDown, context: Context) {}
+    public func updateNSView(_ nsView: SwiftDown, context: Context) {
+      context.coordinator.cancellable?.cancel()
+      context.coordinator.cancellable = Timer
+        .publish(every: debounceTime, on: .current, in: .default)
+        .autoconnect()
+        .first()
+        .sink { _ in
+          let selectedRanges = nsView.selectedRanges
+          nsView.text = text
+          nsView.applyStyles()
+          nsView.selectedRanges = selectedRanges
+        }
+    }
 
     public func makeCoordinator() -> Coordinator {
       Coordinator(self)
@@ -213,9 +193,8 @@ public struct SwiftDownEditor: UIViewRepresentable {
   extension SwiftDownEditor {
     // MARK: - Coordinator
     public class Coordinator: NSObject, NSTextViewDelegate {
-      public var cancellable: Cancellable?
+      var cancellable: Cancellable?
       var parent: SwiftDownEditor
-
       init(_ parent: SwiftDownEditor) {
         self.parent = parent
       }
@@ -229,15 +208,11 @@ public struct SwiftDownEditor: UIViewRepresentable {
       }
 
       public func textViewDidChangeSelection(_ notification: Notification) {
-        guard let textView = notification.object as? NSTextView else {
+        guard let textView = notification.object as? CustomTextView else {
           return
         }
         let rng = textView.selectedRange()
-        if let c = textView as? CustomTextView {
-          DispatchQueue.main.async {
-            self.parent.selectedRange = (rng, tryFindingMarkdownNode(rng: rng, markdownNodes: c.storage.markdownNodes))
-          }
-        }
+        self.parent.onSelectionChange(rng, tryFindingMarkdownNode(rng: rng, markdownNodes: textView.storage.markdownNodes))
       }
     }
   }
@@ -262,7 +237,7 @@ extension SwiftDownEditor {
     editor.isEditable = isEditable
     return editor
   }
-  
+
   public func debounceTime(_ debounceTime: Double) -> Self {
     var editor = self
     editor.debounceTime = debounceTime
