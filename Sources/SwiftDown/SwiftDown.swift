@@ -49,14 +49,42 @@ import Combine
     public override func willMove(toSuperview newSuperview: UIView?) {
       self.highlighter = SwiftDownHighligther(textView: self)
     }
-    
+
     public func textViewDidChange(_ textView: UITextView) {
       self.swiftDownDelegate?.textViewDidChange(self)
     }
-    
+
     public func textViewDidChangeSelection(_ textView: UITextView) {
       self.swiftDownDelegate?.textViewDidChangeSelection(self)
     }
+
+      public override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+          var didHandleEvent = false
+          if let txt = self.text {
+              for press in presses {
+                  guard let key = press.key else { continue }
+                  let rng = self.selectedRange
+                  if key.charactersIgnoringModifiers == UIKeyCommand.inputEnd {
+                      let A = txt.index(txt.startIndex, offsetBy: rng.location)
+                      let lineRange = txt.lineRange(for: A..<A)
+                      let location = txt.distance(from: txt.startIndex, to: lineRange.upperBound)
+                      selectedRange = NSRange(location: max(location - 1, 0), length: 0)
+                      didHandleEvent = true
+                  }
+                  if key.charactersIgnoringModifiers == UIKeyCommand.inputHome {
+                      let A = txt.index(txt.startIndex, offsetBy: rng.location)
+                      let lineRange = txt.lineRange(for: A..<A)
+                      let location = txt.distance(from: txt.startIndex, to: lineRange.lowerBound)
+                      selectedRange = NSRange(location: location, length: 0)
+                      didHandleEvent = true
+                  }
+              }
+          }
+          if didHandleEvent == false {
+              // Didn't handle this key press, so pass the event to the next responder.
+              super.pressesBegan(presses, with: event)
+          }
+      }
   }
 protocol SwiftDownDelegate {
   func textViewDidChange(_ textView: SwiftDown)
